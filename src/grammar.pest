@@ -1,0 +1,25 @@
+WHITESPACE = _{ " " | "\t" | "\n" }
+
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+number = @{ int ~ ("." ~ ASCII_DIGIT+)? ~ (^"e" ~ int)? }
+int    = @{ ASCII_DIGIT+ }
+
+string      = @{ "\"" ~ string_char* ~ "\"" }
+string_char = _{ "\\" ~ escape_char | !("\"") ~ ANY }
+escape_char = _{ "\"" | "\\" }
+
+// TODO parameters
+function_decl = { "fun" ~ ident ~ "(" ~ ")" ~ block }
+
+block = { "{" ~ statement_list ~ "}" }
+
+unit           = { "()" }
+statement_list = { (statement ~ ";")* ~ expression? }
+statement      = { variable_def | expression }
+expression     = { unit | number | string | function_call | ident | block }
+function_call  = { ident ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
+
+variable_def = { "let" ~ ident ~ "=" ~ expression }
+
+program = { SOI ~ function_decl* ~ EOI }
