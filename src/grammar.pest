@@ -2,15 +2,18 @@ WHITESPACE = _{ " " | "\t" | "\n" }
 
 ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
-number = @{ int ~ ("." ~ ASCII_DIGIT+)? ~ (^"e" ~ int)? }
-int    = @{ ASCII_DIGIT+ }
+number       = ${ int ~ decimal_part? ~ exponent? }
+decimal_part = @{ ("." ~ ASCII_DIGIT+) }
+exponent     = @{ (^"e" ~ int) }
+int          = @{ ASCII_DIGIT+ }
 
-string      = @{ "\"" ~ string_char* ~ "\"" }
-string_char = _{ "\\" ~ escape_char | !("\"") ~ ANY }
-escape_char = _{ "\"" | "\\" }
+string       = ${ "\"" ~ string_inner ~ "\"" }
+string_inner = @{ string_char* }
+string_char  = _{ "\\" ~ escape_char | !("\"") ~ ANY }
+escape_char  = _{ "\"" | "\\" }
 
 // TODO parameters
-function_decl = { "fun" ~ ident ~ "(" ~ ")" ~ block }
+function_def = { "fun" ~ ident ~ "(" ~ ")" ~ block }
 
 block = { "{" ~ statement_list ~ "}" }
 
@@ -22,4 +25,4 @@ function_call  = { ident ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
 
 variable_def = { "let" ~ ident ~ "=" ~ expression }
 
-program = { SOI ~ function_decl* ~ EOI }
+program = { SOI ~ function_def* ~ EOI }
