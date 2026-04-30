@@ -4,7 +4,7 @@
 //! language so that I can have a basic working prototype before I implement LLVM translation.
 use std::collections::HashMap;
 
-use crate::parse::{Block, Expression, ProgramTree, Statement, Value};
+use crate::parse::{BinOp, Block, Expression, ProgramTree, Statement, Value};
 
 #[derive(Default)]
 struct ProgramContext {
@@ -19,6 +19,7 @@ fn builtin_print(params: &[Value]) -> Value {
         Value::Int(i) => i,
         Value::Float(f) => f,
         Value::String(s) => s,
+        Value::Bool(b) => b,
     };
     println!("{s}");
     Value::Unit
@@ -101,5 +102,72 @@ fn evaluate_expression(
                 .collect::<Vec<_>>();
             evaluate_function(program, function, &parameters, ctx)
         }
+        Expression::BinOp(lhs, op, rhs) => {
+            let lhs = evaluate_expression(program, lhs, ctx);
+            let rhs = evaluate_expression(program, rhs, ctx);
+            evaluate_bin_op(lhs, *op, rhs)
+        }
+    }
+}
+
+fn evaluate_bin_op(lhs: Value, op: BinOp, rhs: Value) -> Value {
+    // This will all be so much nicer when I implement type checking
+    match op {
+        BinOp::Add => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs + rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs + rhs),
+            _ => panic!("Invalid types for add operation"),
+        },
+        BinOp::Sub => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs - rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs - rhs),
+            _ => panic!("Invalid types for add operation"),
+        },
+        BinOp::Mult => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs * rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs * rhs),
+            _ => panic!("Invalid types for add operation"),
+        },
+        BinOp::Div => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs / rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs / rhs),
+            _ => panic!("Invalid types for add operation"),
+        },
+        BinOp::Eq => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Bool(lhs == rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Bool(lhs == rhs),
+            (Value::String(lhs), Value::String(rhs)) => Value::Bool(lhs == rhs),
+            (Value::Unit, Value::Unit) => Value::Bool(true),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Value::Bool(lhs == rhs),
+            _ => panic!("Invalid types for eq operation"),
+        },
+        BinOp::Neq => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Bool(lhs != rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Bool(lhs != rhs),
+            (Value::String(lhs), Value::String(rhs)) => Value::Bool(lhs != rhs),
+            (Value::Unit, Value::Unit) => Value::Bool(false),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Value::Bool(lhs != rhs),
+            _ => panic!("Invalid types for neq operation"),
+        },
+        BinOp::Gt => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Bool(lhs > rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Bool(lhs > rhs),
+            _ => panic!("Invalid types for gt operation"),
+        },
+        BinOp::Geq => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Bool(lhs >= rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Bool(lhs >= rhs),
+            _ => panic!("Invalid types for geq operation"),
+        },
+        BinOp::Lt => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Bool(lhs < rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Bool(lhs < rhs),
+            _ => panic!("Invalid types for lt operation"),
+        },
+        BinOp::Leq => match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Bool(lhs <= rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Bool(lhs <= rhs),
+            _ => panic!("Invalid types for leq operation"),
+        },
     }
 }

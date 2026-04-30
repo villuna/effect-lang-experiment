@@ -18,10 +18,33 @@ function_def = { "fun" ~ ident ~ "(" ~ ")" ~ block }
 block = { "{" ~ statement_list ~ "}" }
 
 unit           = { "()" }
+bool           = { "true" | "false" }
 statement_list = { (statement ~ ";")* ~ expression? }
 statement      = { variable_def | expression }
-expression     = { unit | number | string | function_call | ident | block }
+atom           = {
+    unit
+  | number
+  | string
+  | bool
+  | function_call
+  | ident
+  | block
+  | "(" ~ expression ~ ")"
+}
 function_call  = { ident ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
+
+expression =  { atom ~ (bin_op ~ atom)* }
+bin_op     = _{ add | sub | mult | div | eq | neq | gt | geq | lt | leq }
+add        =  { "+" }
+sub        =  { "-" }
+mult       =  { "*" }
+div        =  { "/" }
+eq         =  { "==" }
+neq        =  { "!=" }
+gt         =  { ">" }
+geq        =  { ">=" }
+lt         =  { "<" }
+leq        =  { "<=" }
 
 variable_def = { "let" ~ ident ~ "=" ~ expression }
 
