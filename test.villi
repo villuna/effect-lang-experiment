@@ -4,6 +4,16 @@ fun say_hello() {
 
 fun my_favourite_number() { 727 }
 
+fun test_unary() {
+    print(-100);
+    print(-100 * 3);
+    print(1 - -100);
+    print(1 * -3);
+    print(!(7 == 27));
+    print(!false || false);
+    print(false || !false);
+}
+
 fun main() {
     let x = (1 + 2) * 3;
     let y = my_favourite_number() * 2;
@@ -12,4 +22,6 @@ fun main() {
     print(y);
     print(x == y);
     print(y > x + 3);
+
+    test_unary();
 }

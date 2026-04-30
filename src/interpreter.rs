@@ -4,7 +4,7 @@
 //! language so that I can have a basic working prototype before I implement LLVM translation.
 use std::collections::HashMap;
 
-use crate::parse::{BinOp, Block, Expression, ProgramTree, Statement, Value};
+use crate::parse::{BinOp, Block, Expression, ProgramTree, Statement, UnaryOp, Value};
 
 #[derive(Default)]
 struct ProgramContext {
@@ -107,6 +107,10 @@ fn evaluate_expression(
             let rhs = evaluate_expression(program, rhs, ctx);
             evaluate_bin_op(lhs, *op, rhs)
         }
+        Expression::UnaryOp(op, expr) => {
+            let expr = evaluate_expression(program, expr, ctx);
+            evaluate_unary_op(*op, expr)
+        }
     }
 }
 
@@ -168,6 +172,28 @@ fn evaluate_bin_op(lhs: Value, op: BinOp, rhs: Value) -> Value {
             (Value::Int(lhs), Value::Int(rhs)) => Value::Bool(lhs <= rhs),
             (Value::Float(lhs), Value::Float(rhs)) => Value::Bool(lhs <= rhs),
             _ => panic!("Invalid types for leq operation"),
+        },
+        BinOp::And => match (lhs, rhs) {
+            (Value::Bool(lhs), Value::Bool(rhs)) => Value::Bool(lhs && rhs),
+            _ => panic!("Invalid types for and operation"),
+        },
+        BinOp::Or => match (lhs, rhs) {
+            (Value::Bool(lhs), Value::Bool(rhs)) => Value::Bool(lhs || rhs),
+            _ => panic!("Invalid types for or operation"),
+        },
+    }
+}
+
+fn evaluate_unary_op(op: UnaryOp, value: Value) -> Value {
+    match op {
+        UnaryOp::Not => match value {
+            Value::Bool(b) => Value::Bool(!b),
+            _ => panic!("Invalid type for boolean negation operator"),
+        },
+        UnaryOp::Neg => match value {
+            Value::Int(i) => Value::Int(-i),
+            Value::Float(f) => Value::Float(-f),
+            _ => panic!("Invalid type for negation operator"),
         },
     }
 }

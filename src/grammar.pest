@@ -21,7 +21,7 @@ unit           = { "()" }
 bool           = { "true" | "false" }
 statement_list = { (statement ~ ";")* ~ expression? }
 statement      = { variable_def | expression }
-atom           = {
+primary        = {
     unit
   | number
   | string
@@ -34,7 +34,9 @@ atom           = {
 function_call  = { ident ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
 
 expression =  { atom ~ (bin_op ~ atom)* }
-bin_op     = _{ add | sub | mult | div | eq | neq | gt | geq | lt | leq }
+atom       = _{ unary_op? ~ primary }
+bin_op     = _{ add | sub | mult | div | eq | neq | gt | geq | lt | leq | and | or }
+unary_op   = _{ neg | not }
 add        =  { "+" }
 sub        =  { "-" }
 mult       =  { "*" }
@@ -45,6 +47,10 @@ gt         =  { ">" }
 geq        =  { ">=" }
 lt         =  { "<" }
 leq        =  { "<=" }
+and        =  { "&&" }
+or         =  { "||" }
+not        =  { "!" }
+neg        =  { "-" }
 
 variable_def = { "let" ~ ident ~ "=" ~ expression }
 

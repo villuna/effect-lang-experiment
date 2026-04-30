@@ -54,6 +54,24 @@ pub enum BinOp {
     Geq,
     Lt,
     Leq,
+    And,
+    Or,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum UnaryOp {
+    Not,
+    Neg,
+}
+impl UnaryOp {
+    fn from_rule(rule: Rule) -> Option<UnaryOp> {
+        let op = match rule {
+            Rule::neg => UnaryOp::Neg,
+            Rule::not => UnaryOp::Not,
+            _ => return None,
+        };
+        Some(op)
+    }
 }
 
 impl BinOp {
@@ -69,6 +87,8 @@ impl BinOp {
             Rule::geq => BinOp::Geq,
             Rule::lt => BinOp::Lt,
             Rule::leq => BinOp::Leq,
+            Rule::and => BinOp::And,
+            Rule::or => BinOp::Or,
             _ => return None,
         };
 
@@ -86,6 +106,7 @@ pub enum Expression {
         parameters: Vec<Expression>,
     },
     BinOp(Box<Expression>, BinOp, Box<Expression>),
+    UnaryOp(UnaryOp, Box<Expression>),
 }
 
 #[derive(Debug, Clone)]
@@ -109,12 +130,14 @@ struct LangParser;
 static PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     PrattParser::new()
         .op(Op::infix(Rule::eq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))
+        .op(Op::infix(Rule::and, Assoc::Left) | Op::infix(Rule::or, Assoc::Left))
         .op(Op::infix(Rule::gt, Assoc::Left)
             | Op::infix(Rule::geq, Assoc::Left)
             | Op::infix(Rule::lt, Assoc::Left)
             | Op::infix(Rule::leq, Assoc::Left))
         .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
         .op(Op::infix(Rule::mult, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
+        .op(Op::prefix(Rule::not) | Op::prefix(Rule::neg))
 });
 
 /// Parses the entire text of a program file and converts it into an abstract syntax tree
@@ -194,7 +217,7 @@ fn parse_statement(input: Pair<'_, Rule>) -> ParseResult<Statement> {
 
 fn parse_expression(input: Pair<'_, Rule>) -> ParseResult<Expression> {
     PRATT_PARSER
-        .map_primary(parse_atom)
+        .map_primary(parse_primary)
         .map_infix(|lhs, op, rhs| {
             let lhs = lhs?;
             let rhs = rhs?;
@@ -204,10 +227,17 @@ fn parse_expression(input: Pair<'_, Rule>) -> ParseResult<Expression> {
 
             Ok(Expression::BinOp(Box::new(lhs), op, Box::new(rhs)))
         })
+        .map_prefix(|op, expr| {
+            let expr = expr?;
+            let Some(op) = UnaryOp::from_rule(op.as_rule()) else {
+                unreachable!()
+            };
+            Ok(Expression::UnaryOp(op, Box::new(expr)))
+        })
         .parse(input.into_inner())
 }
 
-fn parse_atom(input: Pair<'_, Rule>) -> ParseResult<Expression> {
+fn parse_primary(input: Pair<'_, Rule>) -> ParseResult<Expression> {
     let input = input.into_inner().next().unwrap();
     Ok(match input.as_rule() {
         Rule::unit => Expression::Value(Value::Unit),
@@ -251,6 +281,9 @@ fn parse_atom(input: Pair<'_, Rule>) -> ParseResult<Expression> {
         Rule::block => Expression::Block(parse_block(input)?),
         Rule::bool => Expression::Value(Value::Bool(input.as_str() == "true")),
         Rule::expression => parse_expression(input)?,
-        _ => unreachable!(),
+        _ => {
+            dbg!(input.as_rule());
+            unreachable!()
+        }
     })
 }
