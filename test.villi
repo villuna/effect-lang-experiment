@@ -1,5 +1,9 @@
+fun say_hello() {
+    print("Hello world");
+}
+
 fun main() {
     let x = 1;
-    print("Hello world");
+    say_hello();
     print(x);
 }
