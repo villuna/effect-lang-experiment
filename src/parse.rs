@@ -23,7 +23,15 @@ pub struct ProgramTree {
 #[derive(Debug, Clone)]
 pub struct FunctionDefinition {
     pub name: Identifier,
+    pub params: Vec<FunctionParam>,
     pub block: Block,
+    pub return_type: Option<Type>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionParam {
+    pub name: Identifier,
+    pub ty: Type,
 }
 
 #[derive(Debug, Clone)]
@@ -111,8 +119,25 @@ pub enum Expression {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    VariableDefinition { name: Identifier, value: Expression },
+    VariableDefinition {
+        name: Identifier,
+        ty: Option<Type>,
+        value: Expression,
+    },
     Expression(Expression),
+}
+
+#[derive(Debug, Clone)]
+pub enum Type {
+    Primitive(PrimitiveType),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum PrimitiveType {
+    Int,
+    Float,
+    String,
+    Bool,
 }
 
 type ParseResult<T> = Result<T, pest::error::Error<Rule>>;
@@ -157,19 +182,58 @@ pub fn parse(source: &str) -> ParseResult<ProgramTree> {
     Ok(ProgramTree { functions })
 }
 
+// function_def = { "fun" ~ ident ~ "(" ~ params_list? ~ ")" ~ ("->" ~ type)? ~ block }
 fn parse_function_def(input: Pair<'_, Rule>) -> ParseResult<FunctionDefinition> {
-    let mut input = input.into_inner(); // { "fun" ~ ident ~ "(" ~ ")" ~ block }
+    let mut input = input.into_inner();
     let name = input.next().unwrap();
-    let block = input.next().unwrap();
 
     let name = match name.as_rule() {
         Rule::ident => name.to_string(),
         _ => unreachable!(),
     };
 
-    let block = parse_block(block)?;
+    let mut params = Vec::new();
+    let mut return_type = None;
+    let mut block = None;
 
-    Ok(FunctionDefinition { name, block })
+    for pair in input {
+        match pair.as_rule() {
+            Rule::params_list => params = parse_params_list(pair)?,
+            Rule::r#type => return_type = Some(parse_type(pair)?),
+            Rule::block => block = Some(parse_block(pair)?),
+            _ => unreachable!(),
+        }
+    }
+
+    Ok(FunctionDefinition {
+        name,
+        params,
+        block: block.unwrap(),
+        return_type,
+    })
+}
+
+fn parse_params_list(input: Pair<'_, Rule>) -> ParseResult<Vec<FunctionParam>> {
+    input
+        .into_inner()
+        .map(|param| {
+            assert_eq!(param.as_rule(), Rule::param);
+            parse_param(param)
+        })
+        .collect()
+}
+
+// param = { ident ~ ":" ~ type }
+fn parse_param(input: Pair<'_, Rule>) -> ParseResult<FunctionParam> {
+    let mut input = input.into_inner();
+    let name = input.next().unwrap();
+    assert_eq!(name.as_rule(), Rule::ident);
+    let ty = input.next().unwrap();
+
+    Ok(FunctionParam {
+        name: name.to_string(),
+        ty: parse_type(ty)?,
+    })
 }
 
 fn parse_block(input: Pair<'_, Rule>) -> ParseResult<Block> {
@@ -180,15 +244,19 @@ fn parse_block(input: Pair<'_, Rule>) -> ParseResult<Block> {
         value: None,
     };
 
-    for rule in statements {
-        match rule.as_rule() {
+    for pair in statements {
+        match pair.as_rule() {
             Rule::statement => {
-                result.statements.push(parse_statement(rule)?);
+                result.statements.push(parse_statement(pair)?);
             }
             Rule::expression => {
-                result.value = Some(Box::new(parse_expression(rule)?));
+                result.value = Some(Box::new(parse_expression(pair)?));
             }
-            _ => unreachable!(),
+            _ => panic!(
+                "encountered unexpected rule \"{:?}\"\ninput: \"{}\"",
+                pair.as_rule(),
+                pair.as_str()
+            ),
         }
     }
 
@@ -201,13 +269,24 @@ fn parse_statement(input: Pair<'_, Rule>) -> ParseResult<Statement> {
 
     match rule.as_rule() {
         Rule::variable_def => {
+            // variable_def = { "let" ~ ident ~ (":" ~ type)? ~ "=" ~ expression }
             let mut input = rule.into_inner();
             let name = input.next().unwrap();
-            let value = input.next().unwrap();
+            let mut ty = None;
+            let mut value = None;
+
+            for pair in input {
+                match pair.as_rule() {
+                    Rule::r#type => ty = Some(parse_type(pair)?),
+                    Rule::expression => value = Some(parse_expression(pair)?),
+                    _ => unreachable!(),
+                }
+            }
 
             Ok(Statement::VariableDefinition {
                 name: name.to_string(),
-                value: parse_expression(value)?,
+                ty,
+                value: value.unwrap(),
             })
         }
         Rule::expression => Ok(Statement::Expression(parse_expression(rule)?)),
@@ -285,5 +364,23 @@ fn parse_primary(input: Pair<'_, Rule>) -> ParseResult<Expression> {
             dbg!(input.as_rule());
             unreachable!()
         }
+    })
+}
+
+// type = { primitive_type }
+fn parse_type(input: Pair<'_, Rule>) -> ParseResult<Type> {
+    Ok(Type::Primitive(parse_primitive_type(
+        input.into_inner().next().unwrap(),
+    )?))
+}
+
+// primitive_type = { "string" | "int" | "float" | "bool" }
+fn parse_primitive_type(input: Pair<'_, Rule>) -> ParseResult<PrimitiveType> {
+    Ok(match input.as_str() {
+        "string" => PrimitiveType::String,
+        "int" => PrimitiveType::Int,
+        "float" => PrimitiveType::Float,
+        "bool" => PrimitiveType::Bool,
+        _ => unreachable!(),
     })
 }

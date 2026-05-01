@@ -1,0 +1,10 @@
+fun fibonacci(n: int) -> int {
+}
+
+fun main() {
+    let x: int = 727 + 67;
+    let b: bool = x == 26;
+
+    print(x);
+    print(b);
+}

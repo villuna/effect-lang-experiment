@@ -68,7 +68,11 @@ fn evaluate_block(program: &ProgramTree, block: &Block, ctx: &mut ProgramContext
 
 fn interpret_statement(program: &ProgramTree, statement: &Statement, ctx: &mut ProgramContext) {
     match statement {
-        Statement::VariableDefinition { name, value } => {
+        Statement::VariableDefinition {
+            name,
+            ty, // TODO type checking
+            value,
+        } => {
             let value = evaluate_expression(program, value, ctx);
             ctx.variables.insert(name.clone(), value);
         }
