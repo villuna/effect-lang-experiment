@@ -1,4 +1,5 @@
-fun fibonacci(n: int) -> int {
+fun add(x: int, y: int) -> int {
+    x + y
 }
 
 fun main() {
@@ -7,4 +8,5 @@ fun main() {
 
     print(x);
     print(b);
+    print(add(x, 1.0));
 }

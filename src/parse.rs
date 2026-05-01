@@ -321,10 +321,10 @@ fn parse_primary(input: Pair<'_, Rule>) -> ParseResult<Expression> {
     Ok(match input.as_rule() {
         Rule::unit => Expression::Value(Value::Unit),
         Rule::number => {
-            let mut input = input.into_inner();
-            let int_part = input.next().unwrap();
-            let decimal_part = input.next();
-            let exponential_part = input.next();
+            let mut inner_input = input.clone().into_inner();
+            let int_part = inner_input.next().unwrap();
+            let decimal_part = inner_input.next();
+            let exponential_part = inner_input.next();
 
             if matches!((decimal_part, exponential_part), (None, None)) {
                 assert!(matches!(int_part.as_rule(), Rule::int));

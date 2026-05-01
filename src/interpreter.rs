@@ -8,7 +8,7 @@ use crate::parse::{BinOp, Block, Expression, ProgramTree, Statement, UnaryOp, Va
 
 #[derive(Default)]
 struct ProgramContext {
-    variables: HashMap<String, Value>,
+    variable_stack: Vec<HashMap<String, Value>>,
     builtins: HashMap<String, &'static dyn Fn(&[Value]) -> Value>,
 }
 
@@ -46,7 +46,16 @@ fn evaluate_function(
     ctx: &mut ProgramContext,
 ) -> Value {
     if let Some(function) = program.functions.get(function_name) {
-        evaluate_block(program, &function.block, ctx)
+        let mut stack_frame = HashMap::new();
+
+        for (i, val) in params.iter().enumerate() {
+            stack_frame.insert(function.params[i].name.clone(), val.clone());
+        }
+
+        ctx.variable_stack.push(stack_frame);
+        let res = evaluate_block(program, &function.block, ctx);
+        ctx.variable_stack.pop();
+        res
     } else if let Some(function) = ctx.builtins.get(function_name) {
         function(params)
     } else {
@@ -74,7 +83,10 @@ fn interpret_statement(program: &ProgramTree, statement: &Statement, ctx: &mut P
             value,
         } => {
             let value = evaluate_expression(program, value, ctx);
-            ctx.variables.insert(name.clone(), value);
+            ctx.variable_stack
+                .last_mut()
+                .unwrap()
+                .insert(name.clone(), value);
         }
         Statement::Expression(expression) => {
             // Eval the expression but don't do anything with the value.
@@ -92,7 +104,9 @@ fn evaluate_expression(
         Expression::Value(value) => value.clone(),
         Expression::Block(block) => evaluate_block(program, block, ctx),
         Expression::Var(var) => ctx
-            .variables
+            .variable_stack
+            .last()
+            .unwrap()
             .get(var)
             .expect("Variable not defined")
             .clone(),
