@@ -29,15 +29,18 @@ primary        = {
   | string
   | bool
   | function_call
-  | ident
+  | conditional
   | block
   | "(" ~ expression ~ ")"
+  | ident
 }
 function_call  = { ident ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
 
+conditional = { "if" ~ expression ~ block ~ ("else" ~ (conditional | block))? }
+
 expression =  { atom ~ (bin_op ~ atom)* }
 atom       = _{ unary_op? ~ primary }
-bin_op     = _{ add | sub | mult | div | eq | neq | gt | geq | lt | leq | and | or }
+bin_op     = _{ add | sub | mult | div | eq | neq | geq | gt | leq | lt | and | or }
 unary_op   = _{ neg | not }
 add        =  { "+" }
 sub        =  { "-" }
@@ -60,7 +63,7 @@ function_def = { "fun" ~ ident ~ "(" ~ params_list? ~ ")" ~ ("->" ~ type)? ~ blo
 params_list  = { param ~ ("," ~ param)* }
 param        = { ident ~ ":" ~ type }
 
+// Types
 type = { primitive_type }
 
-// Grammar for types
 primitive_type = { "string" | "int" | "float" | "bool" }

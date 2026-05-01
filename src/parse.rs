@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use pest::{
     Parser,
-    iterators::Pair,
+    iterators::{Pair, Pairs},
     pratt_parser::{Assoc, Op, PrattParser},
 };
 use pest_derive::Parser;
@@ -115,6 +115,11 @@ pub enum Expression {
     },
     BinOp(Box<Expression>, BinOp, Box<Expression>),
     UnaryOp(UnaryOp, Box<Expression>),
+    Conditional {
+        condition: Box<Expression>,
+        if_path: Box<Expression>,
+        else_path: Option<Box<Expression>>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -173,7 +178,9 @@ pub fn parse(source: &str) -> ParseResult<ProgramTree> {
     let functions = parse
         .into_inner()
         .filter_map(|parsed| match parsed.as_rule() {
-            Rule::function_def => Some(parse_function_def(parsed).map(|f| (f.name.clone(), f))),
+            Rule::function_def => {
+                Some(parse_function_def(parsed.into_inner()).map(|f| (f.name.clone(), f)))
+            }
             Rule::EOI => None,
             _ => unreachable!(),
         })
@@ -183,8 +190,7 @@ pub fn parse(source: &str) -> ParseResult<ProgramTree> {
 }
 
 // function_def = { "fun" ~ ident ~ "(" ~ params_list? ~ ")" ~ ("->" ~ type)? ~ block }
-fn parse_function_def(input: Pair<'_, Rule>) -> ParseResult<FunctionDefinition> {
-    let mut input = input.into_inner();
+fn parse_function_def(mut input: Pairs<'_, Rule>) -> ParseResult<FunctionDefinition> {
     let name = input.next().unwrap();
 
     let name = match name.as_rule() {
@@ -198,9 +204,9 @@ fn parse_function_def(input: Pair<'_, Rule>) -> ParseResult<FunctionDefinition> 
 
     for pair in input {
         match pair.as_rule() {
-            Rule::params_list => params = parse_params_list(pair)?,
+            Rule::params_list => params = parse_params_list(pair.into_inner())?,
             Rule::r#type => return_type = Some(parse_type(pair)?),
-            Rule::block => block = Some(parse_block(pair)?),
+            Rule::block => block = Some(parse_block(pair.into_inner())?),
             _ => unreachable!(),
         }
     }
@@ -213,19 +219,17 @@ fn parse_function_def(input: Pair<'_, Rule>) -> ParseResult<FunctionDefinition> 
     })
 }
 
-fn parse_params_list(input: Pair<'_, Rule>) -> ParseResult<Vec<FunctionParam>> {
+fn parse_params_list(input: Pairs<'_, Rule>) -> ParseResult<Vec<FunctionParam>> {
     input
-        .into_inner()
         .map(|param| {
             assert_eq!(param.as_rule(), Rule::param);
-            parse_param(param)
+            parse_param(param.into_inner())
         })
         .collect()
 }
 
 // param = { ident ~ ":" ~ type }
-fn parse_param(input: Pair<'_, Rule>) -> ParseResult<FunctionParam> {
-    let mut input = input.into_inner();
+fn parse_param(mut input: Pairs<'_, Rule>) -> ParseResult<FunctionParam> {
     let name = input.next().unwrap();
     assert_eq!(name.as_rule(), Rule::ident);
     let ty = input.next().unwrap();
@@ -236,9 +240,8 @@ fn parse_param(input: Pair<'_, Rule>) -> ParseResult<FunctionParam> {
     })
 }
 
-fn parse_block(input: Pair<'_, Rule>) -> ParseResult<Block> {
-    let mut input = input.into_inner(); // { "{" ~ statement_list ~ "}" }
-    let statements = input.next().unwrap().into_inner(); // { (statement ~ ";")* ~ expression? }
+fn parse_block(mut input: Pairs<'_, Rule>) -> ParseResult<Block> {
+    let statements = input.next().unwrap().into_inner();
     let mut result = Block {
         statements: vec![],
         value: None,
@@ -247,10 +250,10 @@ fn parse_block(input: Pair<'_, Rule>) -> ParseResult<Block> {
     for pair in statements {
         match pair.as_rule() {
             Rule::statement => {
-                result.statements.push(parse_statement(pair)?);
+                result.statements.push(parse_statement(pair.into_inner())?);
             }
             Rule::expression => {
-                result.value = Some(Box::new(parse_expression(pair)?));
+                result.value = Some(Box::new(parse_expression(pair.into_inner())?));
             }
             _ => panic!(
                 "encountered unexpected rule \"{:?}\"\ninput: \"{}\"",
@@ -263,8 +266,7 @@ fn parse_block(input: Pair<'_, Rule>) -> ParseResult<Block> {
     Ok(result)
 }
 
-fn parse_statement(input: Pair<'_, Rule>) -> ParseResult<Statement> {
-    let mut input = input.into_inner(); // { variable_def | expression }
+fn parse_statement(mut input: Pairs<'_, Rule>) -> ParseResult<Statement> {
     let rule = input.next().unwrap();
 
     match rule.as_rule() {
@@ -278,7 +280,7 @@ fn parse_statement(input: Pair<'_, Rule>) -> ParseResult<Statement> {
             for pair in input {
                 match pair.as_rule() {
                     Rule::r#type => ty = Some(parse_type(pair)?),
-                    Rule::expression => value = Some(parse_expression(pair)?),
+                    Rule::expression => value = Some(parse_expression(pair.into_inner())?),
                     _ => unreachable!(),
                 }
             }
@@ -289,14 +291,14 @@ fn parse_statement(input: Pair<'_, Rule>) -> ParseResult<Statement> {
                 value: value.unwrap(),
             })
         }
-        Rule::expression => Ok(Statement::Expression(parse_expression(rule)?)),
+        Rule::expression => Ok(Statement::Expression(parse_expression(rule.into_inner())?)),
         _ => unreachable!(),
     }
 }
 
-fn parse_expression(input: Pair<'_, Rule>) -> ParseResult<Expression> {
+fn parse_expression(input: Pairs<'_, Rule>) -> ParseResult<Expression> {
     PRATT_PARSER
-        .map_primary(parse_primary)
+        .map_primary(|pair| parse_primary(pair.into_inner()))
         .map_infix(|lhs, op, rhs| {
             let lhs = lhs?;
             let rhs = rhs?;
@@ -313,11 +315,11 @@ fn parse_expression(input: Pair<'_, Rule>) -> ParseResult<Expression> {
             };
             Ok(Expression::UnaryOp(op, Box::new(expr)))
         })
-        .parse(input.into_inner())
+        .parse(input)
 }
 
-fn parse_primary(input: Pair<'_, Rule>) -> ParseResult<Expression> {
-    let input = input.into_inner().next().unwrap();
+fn parse_primary(mut input: Pairs<'_, Rule>) -> ParseResult<Expression> {
+    let input = input.next().unwrap();
     Ok(match input.as_rule() {
         Rule::unit => Expression::Value(Value::Unit),
         Rule::number => {
@@ -346,7 +348,7 @@ fn parse_primary(input: Pair<'_, Rule>) -> ParseResult<Expression> {
 
             for expr in input {
                 match expr.as_rule() {
-                    Rule::expression => parameters.push(parse_expression(expr)?),
+                    Rule::expression => parameters.push(parse_expression(expr.into_inner())?),
                     _ => unreachable!(),
                 }
             }
@@ -357,9 +359,37 @@ fn parse_primary(input: Pair<'_, Rule>) -> ParseResult<Expression> {
             }
         }
         Rule::ident => Expression::Var(input.to_string()),
-        Rule::block => Expression::Block(parse_block(input)?),
+        Rule::block => Expression::Block(parse_block(input.into_inner())?),
         Rule::bool => Expression::Value(Value::Bool(input.as_str() == "true")),
-        Rule::expression => parse_expression(input)?,
+        Rule::conditional => {
+            let mut input = input.into_inner();
+            let condition = input.next().unwrap();
+            assert_eq!(condition.as_rule(), Rule::expression);
+            let condition = parse_expression(condition.into_inner())?;
+
+            let if_path = input.next().unwrap();
+            assert_eq!(if_path.as_rule(), Rule::block);
+            let if_path = Expression::Block(parse_block(if_path.into_inner())?);
+
+            // We need to clone this as if the next part of the if statement is another conditional,
+            // we have to parse the entire conditional.
+            let else_path: Option<Expression> = input
+                .clone()
+                .next()
+                .map(|else_path| match else_path.as_rule() {
+                    Rule::block => Ok(Expression::Block(parse_block(else_path.into_inner())?)),
+                    Rule::conditional => parse_primary(input),
+                    _ => unreachable!(),
+                })
+                .transpose()?;
+
+            Expression::Conditional {
+                condition: Box::new(condition),
+                if_path: Box::new(if_path),
+                else_path: else_path.map(Box::new),
+            }
+        }
+        Rule::expression => parse_expression(input.into_inner())?,
         _ => {
             dbg!(input.as_rule());
             unreachable!()

@@ -129,6 +129,23 @@ fn evaluate_expression(
             let expr = evaluate_expression(program, expr, ctx);
             evaluate_unary_op(*op, expr)
         }
+        Expression::Conditional {
+            condition,
+            if_path,
+            else_path,
+        } => {
+            let Value::Bool(condition) = evaluate_expression(program, condition, ctx) else {
+                panic!("if statement condition must evaluate to bool");
+            };
+
+            if condition {
+                evaluate_expression(program, if_path, ctx)
+            } else if let Some(else_path) = else_path.as_deref() {
+                evaluate_expression(program, else_path, ctx)
+            } else {
+                Value::Unit
+            }
+        }
     }
 }
 
