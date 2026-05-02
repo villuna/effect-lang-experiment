@@ -2,7 +2,7 @@ fun say_hello() {
     print("Hello world");
 }
 
-fun my_favourite_number() { 727 }
+fun my_favourite_number() -> int { 727 }
 
 fun test_unary() {
     print(-100);
@@ -15,8 +15,8 @@ fun test_unary() {
 }
 
 fun main() {
-    let x = (1 + 2) * 3;
-    let y = my_favourite_number() * 2;
+    let x: int = (1 + 2) * 3;
+    let y: int = my_favourite_number() * 2;
     say_hello();
     print(x);
     print(y);

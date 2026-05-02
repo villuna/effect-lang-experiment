@@ -77,11 +77,7 @@ fn evaluate_block(program: &ProgramTree, block: &Block, ctx: &mut ProgramContext
 
 fn interpret_statement(program: &ProgramTree, statement: &Statement, ctx: &mut ProgramContext) {
     match statement {
-        Statement::VariableDefinition {
-            name,
-            ty, // TODO type checking
-            value,
-        } => {
+        Statement::VariableDefinition { name, value, .. } => {
             let value = evaluate_expression(program, value, ctx);
             ctx.variable_stack
                 .last_mut()

@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use pest::{
     Parser,
-    iterators::{Pair, Pairs},
+    iterators::Pairs,
     pratt_parser::{Assoc, Op, PrattParser},
 };
 use pest_derive::Parser;
@@ -50,6 +50,18 @@ pub enum Value {
     Bool(bool),
 }
 
+impl Value {
+    pub fn ty(&self) -> Type {
+        match self {
+            Value::Unit => Type::Unit,
+            Value::Int(_) => Type::Int,
+            Value::Float(_) => Type::Float,
+            Value::String(_) => Type::String,
+            Value::Bool(_) => Type::Bool,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum BinOp {
     Add,
@@ -71,7 +83,30 @@ pub enum UnaryOp {
     Not,
     Neg,
 }
+
+#[derive(Debug, Clone)]
+pub struct UnaryOpType {
+    pub input: Type,
+    pub result: Type,
+}
+
+impl UnaryOpType {
+    pub fn new(input: Type, result: Type) -> Self {
+        Self { input, result }
+    }
+}
+
 impl UnaryOp {
+    pub fn accepted_types(&self) -> Vec<UnaryOpType> {
+        match self {
+            UnaryOp::Neg => vec![
+                UnaryOpType::new(Type::Int, Type::Int),
+                UnaryOpType::new(Type::Float, Type::Float),
+            ],
+            UnaryOp::Not => vec![UnaryOpType::new(Type::Bool, Type::Bool)],
+        }
+    }
+
     fn from_rule(rule: Rule) -> Option<UnaryOp> {
         let op = match rule {
             Rule::neg => UnaryOp::Neg,
@@ -82,7 +117,47 @@ impl UnaryOp {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct BinOpType {
+    pub lhs: Type,
+    pub rhs: Type,
+    pub result: Type,
+}
+
+impl BinOpType {
+    pub fn new(lhs: Type, rhs: Type, result: Type) -> Self {
+        Self { lhs, rhs, result }
+    }
+}
+
 impl BinOp {
+    pub fn accepted_types(&self) -> Vec<BinOpType> {
+        match self {
+            BinOp::Add | BinOp::Sub | BinOp::Mult | BinOp::Div => {
+                vec![
+                    BinOpType::new(Type::Int, Type::Int, Type::Int),
+                    BinOpType::new(Type::Float, Type::Float, Type::Float),
+                ]
+            }
+            BinOp::Gt | BinOp::Lt | BinOp::Geq | BinOp::Leq => {
+                vec![
+                    BinOpType::new(Type::Int, Type::Int, Type::Bool),
+                    BinOpType::new(Type::Float, Type::Float, Type::Bool),
+                ]
+            }
+            BinOp::And | BinOp::Or => {
+                vec![BinOpType::new(Type::Bool, Type::Bool, Type::Bool)]
+            }
+            BinOp::Eq | BinOp::Neq => {
+                let accepted = [Type::Bool, Type::Float, Type::Int, Type::Unit, Type::String];
+                accepted
+                    .into_iter()
+                    .map(|ty| BinOpType::new(ty.clone(), ty, Type::Bool))
+                    .collect()
+            }
+        }
+    }
+
     fn from_rule(rule: Rule) -> Option<Self> {
         let op = match rule {
             Rule::add => BinOp::Add,
@@ -132,17 +207,19 @@ pub enum Statement {
     Expression(Expression),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Type {
-    Primitive(PrimitiveType),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum PrimitiveType {
+    Unit,
     Int,
     Float,
     String,
     Bool,
+}
+
+impl Default for Type {
+    fn default() -> Self {
+        Self::Unit
+    }
 }
 
 type ParseResult<T> = Result<T, pest::error::Error<Rule>>;
@@ -205,7 +282,7 @@ fn parse_function_def(mut input: Pairs<'_, Rule>) -> ParseResult<FunctionDefinit
     for pair in input {
         match pair.as_rule() {
             Rule::params_list => params = parse_params_list(pair.into_inner())?,
-            Rule::r#type => return_type = Some(parse_type(pair)?),
+            Rule::r#type => return_type = Some(parse_type(pair.into_inner())?),
             Rule::block => block = Some(parse_block(pair.into_inner())?),
             _ => unreachable!(),
         }
@@ -236,7 +313,7 @@ fn parse_param(mut input: Pairs<'_, Rule>) -> ParseResult<FunctionParam> {
 
     Ok(FunctionParam {
         name: name.to_string(),
-        ty: parse_type(ty)?,
+        ty: parse_type(ty.into_inner())?,
     })
 }
 
@@ -279,7 +356,7 @@ fn parse_statement(mut input: Pairs<'_, Rule>) -> ParseResult<Statement> {
 
             for pair in input {
                 match pair.as_rule() {
-                    Rule::r#type => ty = Some(parse_type(pair)?),
+                    Rule::r#type => ty = Some(parse_type(pair.into_inner())?),
                     Rule::expression => value = Some(parse_expression(pair.into_inner())?),
                     _ => unreachable!(),
                 }
@@ -397,20 +474,12 @@ fn parse_primary(mut input: Pairs<'_, Rule>) -> ParseResult<Expression> {
     })
 }
 
-// type = { primitive_type }
-fn parse_type(input: Pair<'_, Rule>) -> ParseResult<Type> {
-    Ok(Type::Primitive(parse_primitive_type(
-        input.into_inner().next().unwrap(),
-    )?))
-}
-
-// primitive_type = { "string" | "int" | "float" | "bool" }
-fn parse_primitive_type(input: Pair<'_, Rule>) -> ParseResult<PrimitiveType> {
-    Ok(match input.as_str() {
-        "string" => PrimitiveType::String,
-        "int" => PrimitiveType::Int,
-        "float" => PrimitiveType::Float,
-        "bool" => PrimitiveType::Bool,
+fn parse_type(mut input: Pairs<'_, Rule>) -> ParseResult<Type> {
+    Ok(match input.next().unwrap().as_str() {
+        "string" => Type::String,
+        "int" => Type::Int,
+        "float" => Type::Float,
+        "bool" => Type::Bool,
         _ => unreachable!(),
     })
 }
