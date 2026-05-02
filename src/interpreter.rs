@@ -6,10 +6,12 @@ use std::collections::HashMap;
 
 use crate::parse::{BinOp, Block, Expression, ProgramTree, Statement, UnaryOp, Value};
 
+type BuiltinFn = &'static dyn Fn(&[Value]) -> Value;
+
 #[derive(Default)]
 struct ProgramContext {
     variable_stack: Vec<HashMap<String, Value>>,
-    builtins: HashMap<String, &'static dyn Fn(&[Value]) -> Value>,
+    builtins: HashMap<String, BuiltinFn>,
 }
 
 fn builtin_print(params: &[Value]) -> Value {

@@ -58,7 +58,7 @@ impl TypeChecker {
 
         let res = match block.value.as_deref() {
             Some(expr) => self.resolve_expression(program, expr),
-            None => Some(Type::Unit),
+            _ => Some(Type::Unit),
         };
 
         self.scope_stack.pop();
@@ -123,9 +123,7 @@ impl TypeChecker {
                     return self.resolve_builtin(program, function, parameters);
                 }
 
-                let Some(func_def) = program.functions.get(function) else {
-                    return None;
-                };
+                let func_def = program.functions.get(function)?;
 
                 let parameters_correct = parameters
                     .iter()
