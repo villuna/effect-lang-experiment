@@ -8,5 +8,5 @@ fun main() {
 
     print(x);
     print(b);
-    print(add(x, 1.0));
+    print(add(x, 1));
 }
