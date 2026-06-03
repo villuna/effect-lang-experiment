@@ -5,8 +5,8 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    BinOp, Block, Expression, ExpressionKind, ProgramTree, Statement, StatementKind, UnaryOp,
-    Value, VariableDef,
+    BinOp, Block, Expression, ExpressionKind, ItemKind, ProgramTree, Statement, StatementKind,
+    UnaryOp, Value, VariableAssign, VariableDef,
 };
 
 type BuiltinFn = &'static dyn Fn(&[Value]) -> Value;
@@ -41,6 +41,19 @@ impl ProgramContext {
 
 pub fn interpret(program: &ProgramTree) {
     let mut ctx = ProgramContext::new();
+
+    // Put the static variable stack into the program context and build it up var by var
+    // unfortunately this naive approach means static variables have to be defined in order. But
+    // for now that's acceptable. If I turn this into a real language it won't be.
+    ctx.variable_stack.push(HashMap::new());
+
+    for item in &program.items {
+        if let ItemKind::Static(VariableDef { name, value, .. }) = &item.kind {
+            let val = evaluate_expression(program, value, &mut ctx);
+            ctx.variable_stack[0].insert(name.clone(), val);
+        }
+    }
+
     evaluate_function(program, "main", &[], &mut ctx);
 }
 
@@ -93,6 +106,22 @@ fn interpret_statement(program: &ProgramTree, statement: &Statement, ctx: &mut P
             // Eval the expression but don't do anything with the value.
             evaluate_expression(program, expression, ctx);
         }
+        StatementKind::Assignment(VariableAssign { var, expr }) => {
+            let value = evaluate_expression(program, expr, ctx);
+            let mut assigned = false;
+
+            for scope in &mut ctx.variable_stack {
+                if let Some(var) = scope.get_mut(var) {
+                    *var = value;
+                    assigned = true;
+                    break;
+                }
+            }
+
+            if !assigned {
+                panic!("assignment to undefined variable: \"{var}\"");
+            }
+        }
     }
 }
 
@@ -104,13 +133,17 @@ fn evaluate_expression(
     match &expr.kind {
         ExpressionKind::Value(value) => value.clone(),
         ExpressionKind::Block(block) => evaluate_block(program, block, ctx),
-        ExpressionKind::Var(var) => ctx
-            .variable_stack
-            .last()
-            .unwrap()
-            .get(var)
-            .expect("Variable not defined")
-            .clone(),
+        ExpressionKind::Var(var) => {
+            let mut val = None;
+
+            for scope in &ctx.variable_stack {
+                if let Some(v) = scope.get(var) {
+                    val = Some(v.clone());
+                }
+            }
+
+            val.expect("access to undefined variable \"{var}\"")
+        }
         ExpressionKind::FunctionCall {
             function,
             parameters,

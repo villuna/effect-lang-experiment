@@ -1,0 +1,13 @@
+let count: int = 1;
+
+fun increment(): int {
+    let old_count = count;
+    count = count + 1;
+    old_count
+}
+
+fun main() {
+    print(increment());
+    print(increment());
+    print(increment());
+}

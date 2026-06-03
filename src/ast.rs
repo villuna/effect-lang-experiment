@@ -51,6 +51,13 @@ pub struct Statement {
 pub enum StatementKind {
     Variable(VariableDef),
     Expression(Expression),
+    Assignment(VariableAssign),
+}
+
+#[derive(Debug, Clone)]
+pub struct VariableAssign {
+    pub var: Identifier,
+    pub expr: Expression,
 }
 
 #[derive(Debug, Clone)]

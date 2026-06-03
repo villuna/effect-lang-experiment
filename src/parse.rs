@@ -14,7 +14,7 @@ use pest_derive::Parser;
 
 use crate::ast::{
     BinOp, Block, Expression, ExpressionKind, FunctionDef, FunctionParam, Item, ItemKind,
-    ProgramTree, Statement, StatementKind, Type, UnaryOp, Value, VariableDef,
+    ProgramTree, Statement, StatementKind, Type, UnaryOp, Value, VariableAssign, VariableDef,
 };
 
 type ParseResult<T> = Result<T, pest::error::Error<Rule>>;
@@ -175,10 +175,19 @@ fn parse_statement(mut input: Pairs<'_, Rule>) -> ParseResult<Statement> {
     let kind = match rule.as_rule() {
         Rule::variable_def => StatementKind::Variable(parse_variable_def(rule.into_inner())?),
         Rule::expression => StatementKind::Expression(parse_expression(rule.into_inner())?),
+        Rule::assignment => StatementKind::Assignment(parse_assignment(rule.into_inner())?),
         _ => unreachable!(),
     };
 
     Ok(Statement { kind })
+}
+
+// assignment = { ident ~ "=" ~ expression }
+fn parse_assignment(mut input: Pairs<'_, Rule>) -> ParseResult<VariableAssign> {
+    let var = input.next().unwrap().to_string();
+    let expr = parse_expression(input.next().unwrap().into_inner())?;
+
+    Ok(VariableAssign { var, expr })
 }
 
 fn parse_expression(input: Pairs<'_, Rule>) -> ParseResult<Expression> {
