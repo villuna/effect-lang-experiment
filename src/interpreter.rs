@@ -4,7 +4,10 @@
 //! language so that I can have a basic working prototype before I implement LLVM translation.
 use std::collections::HashMap;
 
-use crate::parse::{BinOp, Block, Expression, ProgramTree, Statement, UnaryOp, Value};
+use crate::ast::{
+    BinOp, Block, Expression, ExpressionKind, ProgramTree, Statement, StatementKind, UnaryOp,
+    Value, VariableDef,
+};
 
 type BuiltinFn = &'static dyn Fn(&[Value]) -> Value;
 
@@ -43,11 +46,11 @@ pub fn interpret(program: &ProgramTree) {
 
 fn evaluate_function(
     program: &ProgramTree,
-    function_name: &str,
+    function_name: impl AsRef<str>,
     params: &[Value],
     ctx: &mut ProgramContext,
 ) -> Value {
-    if let Some(function) = program.functions.get(function_name) {
+    if let Some(function) = program.get_function(function_name.as_ref()) {
         let mut stack_frame = HashMap::new();
 
         for (i, val) in params.iter().enumerate() {
@@ -58,7 +61,7 @@ fn evaluate_function(
         let res = evaluate_block(program, &function.block, ctx);
         ctx.variable_stack.pop();
         res
-    } else if let Some(function) = ctx.builtins.get(function_name) {
+    } else if let Some(function) = ctx.builtins.get(function_name.as_ref()) {
         function(params)
     } else {
         panic!("Function not found")
@@ -78,15 +81,15 @@ fn evaluate_block(program: &ProgramTree, block: &Block, ctx: &mut ProgramContext
 }
 
 fn interpret_statement(program: &ProgramTree, statement: &Statement, ctx: &mut ProgramContext) {
-    match statement {
-        Statement::VariableDefinition { name, value, .. } => {
+    match &statement.kind {
+        StatementKind::Variable(VariableDef { name, value, .. }) => {
             let value = evaluate_expression(program, value, ctx);
             ctx.variable_stack
                 .last_mut()
                 .unwrap()
                 .insert(name.clone(), value);
         }
-        Statement::Expression(expression) => {
+        StatementKind::Expression(expression) => {
             // Eval the expression but don't do anything with the value.
             evaluate_expression(program, expression, ctx);
         }
@@ -98,17 +101,17 @@ fn evaluate_expression(
     expr: &Expression,
     ctx: &mut ProgramContext,
 ) -> Value {
-    match expr {
-        Expression::Value(value) => value.clone(),
-        Expression::Block(block) => evaluate_block(program, block, ctx),
-        Expression::Var(var) => ctx
+    match &expr.kind {
+        ExpressionKind::Value(value) => value.clone(),
+        ExpressionKind::Block(block) => evaluate_block(program, block, ctx),
+        ExpressionKind::Var(var) => ctx
             .variable_stack
             .last()
             .unwrap()
             .get(var)
             .expect("Variable not defined")
             .clone(),
-        Expression::FunctionCall {
+        ExpressionKind::FunctionCall {
             function,
             parameters,
         } => {
@@ -118,16 +121,16 @@ fn evaluate_expression(
                 .collect::<Vec<_>>();
             evaluate_function(program, function, &parameters, ctx)
         }
-        Expression::BinOp(lhs, op, rhs) => {
+        ExpressionKind::BinOp(lhs, op, rhs) => {
             let lhs = evaluate_expression(program, lhs, ctx);
             let rhs = evaluate_expression(program, rhs, ctx);
             evaluate_bin_op(lhs, *op, rhs)
         }
-        Expression::UnaryOp(op, expr) => {
+        ExpressionKind::UnaryOp(op, expr) => {
             let expr = evaluate_expression(program, expr, ctx);
             evaluate_unary_op(*op, expr)
         }
-        Expression::Conditional {
+        ExpressionKind::Conditional {
             condition,
             if_path,
             else_path,

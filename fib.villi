@@ -1,4 +1,4 @@
-fun fibonacci(n: int) -> int {
+fun fibonacci(n: int): int {
     if n < 1 {
         0
     } else if n == 1 {

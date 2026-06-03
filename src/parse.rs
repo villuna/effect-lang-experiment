@@ -1,10 +1,9 @@
-//! This module defines the abstract syntax tree (AST) of the language and provides a function to
-//! parse the AST from the source code ([parse]).
+//! Functions for parsing a program from an input string to an abstract syntax tree.
 
 // Most of the functions in this module are of the form parse_RULE which simply transforms the
 // concrete syntax tree given to us by Pest's parser and turns it into the abstract syntax tree.
 
-use std::{collections::HashMap, sync::LazyLock};
+use std::sync::LazyLock;
 
 use pest::{
     Parser,
@@ -13,214 +12,10 @@ use pest::{
 };
 use pest_derive::Parser;
 
-pub type Identifier = String;
-
-#[derive(Debug, Clone)]
-pub struct ProgramTree {
-    pub functions: HashMap<Identifier, FunctionDefinition>,
-}
-
-#[derive(Debug, Clone)]
-pub struct FunctionDefinition {
-    pub name: Identifier,
-    pub params: Vec<FunctionParam>,
-    pub block: Block,
-    pub return_type: Option<Type>,
-}
-
-#[derive(Debug, Clone)]
-pub struct FunctionParam {
-    pub name: Identifier,
-    pub ty: Type,
-}
-
-#[derive(Debug, Clone)]
-pub struct Block {
-    pub statements: Vec<Statement>,
-    // This has to be boxed since Expression could be a Block
-    pub value: Option<Box<Expression>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Value {
-    Unit,
-    Int(i64),
-    Float(f64),
-    String(String),
-    Bool(bool),
-}
-
-impl Value {
-    pub fn ty(&self) -> Type {
-        match self {
-            Value::Unit => Type::Unit,
-            Value::Int(_) => Type::Int,
-            Value::Float(_) => Type::Float,
-            Value::String(_) => Type::String,
-            Value::Bool(_) => Type::Bool,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum BinOp {
-    Add,
-    Sub,
-    Mult,
-    Div,
-    Eq,
-    Neq,
-    Gt,
-    Geq,
-    Lt,
-    Leq,
-    And,
-    Or,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum UnaryOp {
-    Not,
-    Neg,
-}
-
-#[derive(Debug, Clone)]
-pub struct UnaryOpType {
-    pub input: Type,
-    pub result: Type,
-}
-
-impl UnaryOpType {
-    pub fn new(input: Type, result: Type) -> Self {
-        Self { input, result }
-    }
-}
-
-impl UnaryOp {
-    pub fn accepted_types(&self) -> Vec<UnaryOpType> {
-        match self {
-            UnaryOp::Neg => vec![
-                UnaryOpType::new(Type::Int, Type::Int),
-                UnaryOpType::new(Type::Float, Type::Float),
-            ],
-            UnaryOp::Not => vec![UnaryOpType::new(Type::Bool, Type::Bool)],
-        }
-    }
-
-    fn from_rule(rule: Rule) -> Option<UnaryOp> {
-        let op = match rule {
-            Rule::neg => UnaryOp::Neg,
-            Rule::not => UnaryOp::Not,
-            _ => return None,
-        };
-        Some(op)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct BinOpType {
-    pub lhs: Type,
-    pub rhs: Type,
-    pub result: Type,
-}
-
-impl BinOpType {
-    pub fn new(lhs: Type, rhs: Type, result: Type) -> Self {
-        Self { lhs, rhs, result }
-    }
-}
-
-impl BinOp {
-    pub fn accepted_types(&self) -> Vec<BinOpType> {
-        match self {
-            BinOp::Add | BinOp::Sub | BinOp::Mult | BinOp::Div => {
-                vec![
-                    BinOpType::new(Type::Int, Type::Int, Type::Int),
-                    BinOpType::new(Type::Float, Type::Float, Type::Float),
-                ]
-            }
-            BinOp::Gt | BinOp::Lt | BinOp::Geq | BinOp::Leq => {
-                vec![
-                    BinOpType::new(Type::Int, Type::Int, Type::Bool),
-                    BinOpType::new(Type::Float, Type::Float, Type::Bool),
-                ]
-            }
-            BinOp::And | BinOp::Or => {
-                vec![BinOpType::new(Type::Bool, Type::Bool, Type::Bool)]
-            }
-            BinOp::Eq | BinOp::Neq => {
-                let accepted = [Type::Bool, Type::Float, Type::Int, Type::Unit, Type::String];
-                accepted
-                    .into_iter()
-                    .map(|ty| BinOpType::new(ty.clone(), ty, Type::Bool))
-                    .collect()
-            }
-        }
-    }
-
-    fn from_rule(rule: Rule) -> Option<Self> {
-        let op = match rule {
-            Rule::add => BinOp::Add,
-            Rule::sub => BinOp::Sub,
-            Rule::mult => BinOp::Mult,
-            Rule::div => BinOp::Div,
-            Rule::eq => BinOp::Eq,
-            Rule::neq => BinOp::Neq,
-            Rule::gt => BinOp::Gt,
-            Rule::geq => BinOp::Geq,
-            Rule::lt => BinOp::Lt,
-            Rule::leq => BinOp::Leq,
-            Rule::and => BinOp::And,
-            Rule::or => BinOp::Or,
-            _ => return None,
-        };
-
-        Some(op)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Expression {
-    Value(Value),
-    Block(Block),
-    Var(Identifier),
-    FunctionCall {
-        function: Identifier,
-        parameters: Vec<Expression>,
-    },
-    BinOp(Box<Expression>, BinOp, Box<Expression>),
-    UnaryOp(UnaryOp, Box<Expression>),
-    Conditional {
-        condition: Box<Expression>,
-        if_path: Box<Expression>,
-        else_path: Option<Box<Expression>>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum Statement {
-    VariableDefinition {
-        name: Identifier,
-        ty: Option<Type>,
-        value: Expression,
-    },
-    Expression(Expression),
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Type {
-    Unit,
-    Int,
-    Float,
-    String,
-    Bool,
-}
-
-impl Default for Type {
-    fn default() -> Self {
-        Self::Unit
-    }
-}
+use crate::ast::{
+    BinOp, Block, Expression, ExpressionKind, FunctionDef, FunctionParam, Item, ItemKind,
+    ProgramTree, Statement, StatementKind, Type, UnaryOp, Value, VariableDef,
+};
 
 type ParseResult<T> = Result<T, pest::error::Error<Rule>>;
 
@@ -252,22 +47,53 @@ static PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
 pub fn parse(source: &str) -> ParseResult<ProgramTree> {
     let parse = LangParser::parse(Rule::program, source)?.next().unwrap();
 
-    let functions = parse
+    let items = parse
         .into_inner()
         .filter_map(|parsed| match parsed.as_rule() {
-            Rule::function_def => {
-                Some(parse_function_def(parsed.into_inner()).map(|f| (f.name.clone(), f)))
-            }
+            Rule::item => Some(parse_item(parsed.into_inner())),
             Rule::EOI => None,
             _ => unreachable!(),
         })
         .collect::<ParseResult<_>>()?;
 
-    Ok(ProgramTree { functions })
+    Ok(ProgramTree { items })
+}
+
+fn parse_item(mut input: Pairs<'_, Rule>) -> ParseResult<Item> {
+    let rule = input.next().unwrap();
+
+    let kind = match rule.as_rule() {
+        Rule::function_def => ItemKind::Function(parse_function_def(rule.into_inner())?),
+        Rule::variable_def => ItemKind::Static(parse_variable_def(rule.into_inner())?),
+        _ => unreachable!(),
+    };
+
+    Ok(Item { kind })
+}
+
+// variable_def = { "let" ~ ident ~ (":" ~ type)? ~ "=" ~ expression }
+fn parse_variable_def(mut input: Pairs<'_, Rule>) -> ParseResult<VariableDef> {
+    let name = input.next().unwrap();
+    let mut ty = None;
+    let mut value = None;
+
+    for pair in input {
+        match pair.as_rule() {
+            Rule::r#type => ty = Some(parse_type(pair.into_inner())?),
+            Rule::expression => value = Some(parse_expression(pair.into_inner())?),
+            _ => unreachable!(),
+        }
+    }
+
+    Ok(VariableDef {
+        name: name.to_string(),
+        ty,
+        value: value.unwrap(),
+    })
 }
 
 // function_def = { "fun" ~ ident ~ "(" ~ params_list? ~ ")" ~ ("->" ~ type)? ~ block }
-fn parse_function_def(mut input: Pairs<'_, Rule>) -> ParseResult<FunctionDefinition> {
+fn parse_function_def(mut input: Pairs<'_, Rule>) -> ParseResult<FunctionDef> {
     let name = input.next().unwrap();
 
     let name = match name.as_rule() {
@@ -288,7 +114,7 @@ fn parse_function_def(mut input: Pairs<'_, Rule>) -> ParseResult<FunctionDefinit
         }
     }
 
-    Ok(FunctionDefinition {
+    Ok(FunctionDef {
         name,
         params,
         block: block.unwrap(),
@@ -346,31 +172,13 @@ fn parse_block(mut input: Pairs<'_, Rule>) -> ParseResult<Block> {
 fn parse_statement(mut input: Pairs<'_, Rule>) -> ParseResult<Statement> {
     let rule = input.next().unwrap();
 
-    match rule.as_rule() {
-        Rule::variable_def => {
-            // variable_def = { "let" ~ ident ~ (":" ~ type)? ~ "=" ~ expression }
-            let mut input = rule.into_inner();
-            let name = input.next().unwrap();
-            let mut ty = None;
-            let mut value = None;
-
-            for pair in input {
-                match pair.as_rule() {
-                    Rule::r#type => ty = Some(parse_type(pair.into_inner())?),
-                    Rule::expression => value = Some(parse_expression(pair.into_inner())?),
-                    _ => unreachable!(),
-                }
-            }
-
-            Ok(Statement::VariableDefinition {
-                name: name.to_string(),
-                ty,
-                value: value.unwrap(),
-            })
-        }
-        Rule::expression => Ok(Statement::Expression(parse_expression(rule.into_inner())?)),
+    let kind = match rule.as_rule() {
+        Rule::variable_def => StatementKind::Variable(parse_variable_def(rule.into_inner())?),
+        Rule::expression => StatementKind::Expression(parse_expression(rule.into_inner())?),
         _ => unreachable!(),
-    }
+    };
+
+    Ok(Statement { kind })
 }
 
 fn parse_expression(input: Pairs<'_, Rule>) -> ParseResult<Expression> {
@@ -383,22 +191,31 @@ fn parse_expression(input: Pairs<'_, Rule>) -> ParseResult<Expression> {
                 unreachable!()
             };
 
-            Ok(Expression::BinOp(Box::new(lhs), op, Box::new(rhs)))
+            Ok(Expression {
+                kind: ExpressionKind::BinOp(Box::new(lhs), op, Box::new(rhs)),
+            })
         })
         .map_prefix(|op, expr| {
             let expr = expr?;
             let Some(op) = UnaryOp::from_rule(op.as_rule()) else {
                 unreachable!()
             };
-            Ok(Expression::UnaryOp(op, Box::new(expr)))
+            Ok(Expression {
+                kind: ExpressionKind::UnaryOp(op, Box::new(expr)),
+            })
         })
         .parse(input)
 }
 
 fn parse_primary(mut input: Pairs<'_, Rule>) -> ParseResult<Expression> {
     let input = input.next().unwrap();
-    Ok(match input.as_rule() {
-        Rule::unit => Expression::Value(Value::Unit),
+
+    if matches!(input.as_rule(), Rule::expression) {
+        return parse_expression(input.into_inner());
+    }
+
+    let kind = match input.as_rule() {
+        Rule::unit => ExpressionKind::Value(Value::Unit),
         Rule::number => {
             let mut inner_input = input.clone().into_inner();
             let int_part = inner_input.next().unwrap();
@@ -407,16 +224,16 @@ fn parse_primary(mut input: Pairs<'_, Rule>) -> ParseResult<Expression> {
 
             if matches!((decimal_part, exponential_part), (None, None)) {
                 assert!(matches!(int_part.as_rule(), Rule::int));
-                Expression::Value(Value::Int(int_part.as_str().parse().unwrap()))
+                ExpressionKind::Value(Value::Int(int_part.as_str().parse().unwrap()))
             } else {
-                Expression::Value(Value::Float(input.as_str().parse().unwrap()))
+                ExpressionKind::Value(Value::Float(input.as_str().parse().unwrap()))
             }
         }
         Rule::string => {
             let input = input.into_inner().next().unwrap();
 
             // TODO handle escape chars
-            Expression::Value(Value::String(input.to_string()))
+            ExpressionKind::Value(Value::String(input.to_string()))
         }
         Rule::function_call => {
             let mut input = input.into_inner();
@@ -430,14 +247,14 @@ fn parse_primary(mut input: Pairs<'_, Rule>) -> ParseResult<Expression> {
                 }
             }
 
-            Expression::FunctionCall {
+            ExpressionKind::FunctionCall {
                 function: name.to_string(),
                 parameters,
             }
         }
-        Rule::ident => Expression::Var(input.to_string()),
-        Rule::block => Expression::Block(parse_block(input.into_inner())?),
-        Rule::bool => Expression::Value(Value::Bool(input.as_str() == "true")),
+        Rule::ident => ExpressionKind::Var(input.to_string()),
+        Rule::block => ExpressionKind::Block(parse_block(input.into_inner())?),
+        Rule::bool => ExpressionKind::Value(Value::Bool(input.as_str() == "true")),
         Rule::conditional => {
             let mut input = input.into_inner();
             let condition = input.next().unwrap();
@@ -446,7 +263,9 @@ fn parse_primary(mut input: Pairs<'_, Rule>) -> ParseResult<Expression> {
 
             let if_path = input.next().unwrap();
             assert_eq!(if_path.as_rule(), Rule::block);
-            let if_path = Expression::Block(parse_block(if_path.into_inner())?);
+            let if_path = Expression {
+                kind: ExpressionKind::Block(parse_block(if_path.into_inner())?),
+            };
 
             // We need to clone this as if the next part of the if statement is another conditional,
             // we have to parse the entire conditional.
@@ -454,24 +273,24 @@ fn parse_primary(mut input: Pairs<'_, Rule>) -> ParseResult<Expression> {
                 .clone()
                 .next()
                 .map(|else_path| match else_path.as_rule() {
-                    Rule::block => Ok(Expression::Block(parse_block(else_path.into_inner())?)),
+                    Rule::block => Ok(Expression {
+                        kind: ExpressionKind::Block(parse_block(else_path.into_inner())?),
+                    }),
                     Rule::conditional => parse_primary(input),
                     _ => unreachable!(),
                 })
                 .transpose()?;
 
-            Expression::Conditional {
+            ExpressionKind::Conditional {
                 condition: Box::new(condition),
                 if_path: Box::new(if_path),
                 else_path: else_path.map(Box::new),
             }
         }
-        Rule::expression => parse_expression(input.into_inner())?,
-        _ => {
-            dbg!(input.as_rule());
-            unreachable!()
-        }
-    })
+        _ => unreachable!(),
+    };
+
+    Ok(Expression { kind })
 }
 
 fn parse_type(mut input: Pairs<'_, Rule>) -> ParseResult<Type> {

@@ -1,4 +1,4 @@
-program = { SOI ~ function_def* ~ EOI }
+program = { SOI ~ item* ~ EOI }
 
 // Basic components (ints, strings etc)
 WHITESPACE = _{ " " | "\t" | "\n" }
@@ -59,7 +59,8 @@ neg        =  { "-" }
 
 variable_def = { "let" ~ ident ~ (":" ~ type)? ~ "=" ~ expression }
 
-function_def = { "fun" ~ ident ~ "(" ~ params_list? ~ ")" ~ ("->" ~ type)? ~ block }
+item         = { function_def | variable_def }
+function_def = { "fun" ~ ident ~ "(" ~ params_list? ~ ")" ~ (":" ~ type)? ~ block }
 params_list  = { param ~ ("," ~ param)* }
 param        = { ident ~ ":" ~ type }
 

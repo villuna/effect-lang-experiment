@@ -2,7 +2,7 @@ fun say_hello() {
     print("Hello world");
 }
 
-fun my_favourite_number() -> int { 727 }
+fun my_favourite_number(): int { 727 }
 
 fun test_unary() {
     print(-100);
